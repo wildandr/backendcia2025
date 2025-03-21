@@ -253,10 +253,23 @@ router.post(
   authenticateToken,
   upload.fields([
     { name: 'payment_proof', maxCount: 1 },
-    { name: 'ktm', maxCount: 4 },
-    { name: 'active_student_letter', maxCount: 4 },
-    { name: 'photo', maxCount: 4 },
     { name: 'voucher', maxCount: 1 },
+    // Leader files
+    { name: 'ktm_leader', maxCount: 1 },
+    { name: 'active_student_letter_leader', maxCount: 1 },
+    { name: 'photo_leader', maxCount: 1 },
+    // Member 1 files
+    { name: 'ktm_member1', maxCount: 1 },
+    { name: 'active_student_letter_member1', maxCount: 1 },
+    { name: 'photo_member1', maxCount: 1 },
+    // Member 2 files
+    { name: 'ktm_member2', maxCount: 1 },
+    { name: 'active_student_letter_member2', maxCount: 1 },
+    { name: 'photo_member2', maxCount: 1 },
+    // Member 3 files
+    { name: 'ktm_member3', maxCount: 1 },
+    { name: 'active_student_letter_member3', maxCount: 1 },
+    { name: 'photo_member3', maxCount: 1 },
   ]),
   async (req, res) => {
     try {
@@ -326,13 +339,13 @@ router.post(
         { type: QueryTypes.SELECT }
       )
 
-      // Handle leader files
+      // Handle leader files with new field names
       const leaderFiles = {
-        ktm: req.files.ktm ? req.files.ktm[0].path : null,
-        active_student_letter: req.files.active_student_letter
-          ? req.files.active_student_letter[0].path
+        ktm: req.files.ktm_leader ? req.files.ktm_leader[0].path : null,
+        active_student_letter: req.files.active_student_letter_leader
+          ? req.files.active_student_letter_leader[0].path
           : null,
-        photo: req.files.photo ? req.files.photo[0].path : null,
+        photo: req.files.photo_leader ? req.files.photo_leader[0].path : null,
       }
 
       await sequelize.query(
@@ -348,18 +361,23 @@ router.post(
         }
       )
 
-      // Handle member files
-      let fileIndex = 1
+      // Handle member files with specific field names
       await Promise.all(
-        membersData.map(async (member) => {
+        membersData.map(async (member, index) => {
+          const memberIndex = index + 1
           const memberFiles = {
-            ktm: req.files.ktm ? req.files.ktm[fileIndex].path : null,
-            active_student_letter: req.files.active_student_letter
-              ? req.files.active_student_letter[fileIndex].path
+            ktm: req.files[`ktm_member${memberIndex}`]
+              ? req.files[`ktm_member${memberIndex}`][0].path
               : null,
-            photo: req.files.photo ? req.files.photo[fileIndex].path : null,
+            active_student_letter: req.files[
+              `active_student_letter_member${memberIndex}`
+            ]
+              ? req.files[`active_student_letter_member${memberIndex}`][0].path
+              : null,
+            photo: req.files[`photo_member${memberIndex}`]
+              ? req.files[`photo_member${memberIndex}`][0].path
+              : null,
           }
-          fileIndex++
 
           await sequelize.query(
             `INSERT INTO members (team_id, full_name, department, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) VALUES (:teamId, :full_name, :department, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
