@@ -10,6 +10,10 @@ const { QueryTypes } = require('sequelize')
 
 const User = require('../models/user')
 
+// JWT secret key - should be moved to environment variables
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+const JWT_EXPIRES_IN = '24h'
+
 /**
  * @swagger
  * /api/user:
@@ -132,12 +136,10 @@ router.post('/user/register', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, saltRounds)
 
-    // If eventId is not provided, set it to null
     if (!eventId) {
       eventId = null
     }
 
-    // If isAdmin is not provided, set it to false
     if (!isAdmin) {
       isAdmin = false
     }
@@ -150,11 +152,25 @@ router.post('/user/register', async (req, res) => {
       eventId,
     })
 
+    // Generate JWT token
+    const payload = {
+      id: newUser.id,
+      username: newUser.username,
+      email: newUser.email,
+      isAdmin: newUser.isAdmin,
+    }
+
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: JWT_EXPIRES_IN,
+    })
+
     newUser.password = undefined
 
     res.status(201).json({
       message: 'User created successfully',
       user: newUser,
+      token: token,
+      expiresIn: JWT_EXPIRES_IN,
     })
   } catch (err) {
     console.error(err)
@@ -232,8 +248,16 @@ router.post('/user/login', async (req, res) => {
       })
     }
 
-    const token = jwt.sign({ id: user.id }, 'your-secret-key', {
-      expiresIn: '60d',
+    // Enhanced JWT payload
+    const payload = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      isAdmin: user.isAdmin,
+    }
+
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: JWT_EXPIRES_IN,
     })
 
     user.password = undefined
@@ -242,6 +266,7 @@ router.post('/user/login', async (req, res) => {
       message: 'User logged in successfully',
       user: user,
       token: token,
+      expiresIn: JWT_EXPIRES_IN,
     })
   } catch (err) {
     console.error(err)
