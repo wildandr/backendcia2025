@@ -3,6 +3,38 @@ const Craft = require('../models/craft.js')
 const authenticateToken = require('../middleware/authenticateToken.js')
 const router = express.Router()
 const { ValidationError } = require('sequelize')
+const fs = require('fs')
+const multer = require('multer')
+const path = require('path')
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './uploads')
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
+    cb(
+      null,
+      file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)
+    )
+  },
+})
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/
+    const extname = allowedTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    )
+    if (extname) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only .jpeg, .jpg, .png and .pdf format allowed!'))
+    }
+  },
+})
 
 /**
  * @swagger
@@ -157,37 +189,71 @@ router.get('/crafts/user/:user_id', authenticateToken, async (req, res) => {
  *       500:
  *         description: Internal Server Error
  */
-router.post('/crafts/register', authenticateToken, async (req, res) => {
-  try {
-    const craft = await Craft.create({
-      full_name: req.body.full_name,
-      institution_name: req.body.institution_name,
-      user_id: req.body.user_id,
-      activity_choice: req.body.activity_choice,
-      whatsapp_number: req.body.whatsapp_number,
-      isMahasiswaDTSL: req.body.isMahasiswaDTSL,
-      ktm: req.body.ktm,
-      payment_proof: req.body.payment_proof,
-      email: req.body.email,
-      isVerified: req.body.isVerified,
-      bukti_follow_cia: req.body.bukti_follow_cia,
-      bukti_follow_pktsl: req.body.bukti_follow_pktsl,
-      bukti_story: req.body.bukti_story,
-      bundling_member: req.body.bundling_member,
-    })
-    res.status(201).json({
-      message: 'Berhasil menambahkan peserta craft baru',
-      data: craft,
-    })
-  } catch (err) {
-    console.error(err)
-    if (err instanceof ValidationError) {
-      res.status(400).json({ message: err.message })
-    } else {
-      res.status(500).json({ message: 'Internal Server Error' })
+router.post(
+  '/crafts/register',
+  authenticateToken,
+  upload.fields([
+    { name: 'bukti_follow_cia', maxCount: 1 },
+    { name: 'bukti_follow_pktsl', maxCount: 1 },
+    { name: 'bukti_story', maxCount: 1 },
+    { name: 'ktm', maxCount: 1 },
+    { name: 'payment_proof', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      // Parse participant data
+      const participantData =
+        typeof req.body.participant === 'string'
+          ? JSON.parse(req.body.participant)
+          : req.body.participant
+
+      // Get file paths
+      const bukti_follow_cia = req.files.bukti_follow_cia
+        ? req.files.bukti_follow_cia[0].path
+        : null
+      const bukti_follow_pktsl = req.files.bukti_follow_pktsl
+        ? req.files.bukti_follow_pktsl[0].path
+        : null
+      const bukti_story = req.files.bukti_story
+        ? req.files.bukti_story[0].path
+        : null
+      const ktm = req.files.ktm ? req.files.ktm[0].path : null
+      const payment_proof = req.files.payment_proof
+        ? req.files.payment_proof[0].path
+        : null
+
+      const craft = await Craft.create({
+        ...participantData,
+        ktm,
+        payment_proof,
+        bukti_follow_cia,
+        bukti_follow_pktsl,
+        bukti_story,
+      })
+
+      res.status(201).json({
+        message: 'Berhasil menambahkan peserta craft baru',
+        data: craft,
+      })
+    } catch (err) {
+      // Delete uploaded files if registration fails
+      if (req.files) {
+        Object.values(req.files).forEach((fileArray) => {
+          fileArray.forEach((file) => {
+            fs.unlinkSync(file.path)
+          })
+        })
+      }
+
+      console.error(err)
+      if (err instanceof ValidationError) {
+        res.status(400).json({ message: err.message })
+      } else {
+        res.status(500).json({ message: 'Internal Server Error' })
+      }
     }
   }
-})
+)
 
 /**
  * @swagger
@@ -333,37 +399,68 @@ router.put(
 router.put(
   '/crafts/edit/:participant_id',
   authenticateToken,
+  upload.fields([
+    { name: 'bukti_follow_cia', maxCount: 1 },
+    { name: 'bukti_follow_pktsl', maxCount: 1 },
+    { name: 'bukti_story', maxCount: 1 },
+    { name: 'ktm', maxCount: 1 },
+    { name: 'payment_proof', maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
-      const craft = await Craft.update(
-        {
-          full_name: req.body.full_name,
-          institution_name: req.body.institution_name,
-          user_id: req.body.user_id,
-          activity_choice: req.body.activity_choice,
-          whatsapp_number: req.body.whatsapp_number,
-          isMahasiswaDTSL: req.body.isMahasiswaDTSL,
-          ktm: req.body.ktm,
-          payment_proof: req.body.payment_proof,
-          email: req.body.email,
-          isVerified: req.body.isVerified,
-        },
-        {
-          where: {
-            participant_id: req.params.participant_id,
-          },
+      const craft = await Craft.findOne({
+        where: { participant_id: req.params.participant_id },
+      })
+
+      if (!craft) {
+        // Delete uploaded files if participant not found
+        if (req.files) {
+          Object.values(req.files).forEach((fileArray) => {
+            fileArray.forEach((file) => {
+              fs.unlinkSync(file.path)
+            })
+          })
         }
-      )
-      if (craft[0] === 0) {
-        res.status(404).json({
+        return res.status(404).json({
           message: 'Peserta craft dengan ID tersebut tidak ditemukan',
         })
-      } else {
-        res.status(200).json({
-          message: 'Berhasil memperbarui data peserta craft',
-          data: craft,
-        })
       }
+
+      // Delete old files if new ones are uploaded
+      if (req.files.bukti_follow_cia && craft.bukti_follow_cia)
+        fs.unlinkSync(craft.bukti_follow_cia)
+      if (req.files.bukti_follow_pktsl && craft.bukti_follow_pktsl)
+        fs.unlinkSync(craft.bukti_follow_pktsl)
+      if (req.files.bukti_story && craft.bukti_story)
+        fs.unlinkSync(craft.bukti_story)
+      if (req.files.ktm && craft.ktm) fs.unlinkSync(craft.ktm)
+      if (req.files.payment_proof && craft.payment_proof)
+        fs.unlinkSync(craft.payment_proof)
+
+      // Get new file paths
+      const updateData = {
+        ...req.body,
+        bukti_follow_cia: req.files.bukti_follow_cia
+          ? req.files.bukti_follow_cia[0].path
+          : craft.bukti_follow_cia,
+        bukti_follow_pktsl: req.files.bukti_follow_pktsl
+          ? req.files.bukti_follow_pktsl[0].path
+          : craft.bukti_follow_pktsl,
+        bukti_story: req.files.bukti_story
+          ? req.files.bukti_story[0].path
+          : craft.bukti_story,
+        ktm: req.files.ktm ? req.files.ktm[0].path : craft.ktm,
+        payment_proof: req.files.payment_proof
+          ? req.files.payment_proof[0].path
+          : craft.payment_proof,
+      }
+
+      await craft.update(updateData)
+
+      res.status(200).json({
+        message: 'Berhasil memperbarui data peserta craft',
+        data: craft,
+      })
     } catch (err) {
       console.error(err)
       if (err instanceof ValidationError) {
