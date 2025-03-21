@@ -5,6 +5,8 @@ const bodyParser = require('body-parser')
 const fs = require('fs')
 const http = require('http')
 const cors = require('cors')
+const multer = require('multer')
+const path = require('path')
 
 const app = express()
 const port = 5001
@@ -15,6 +17,19 @@ const cicRouter = require('./routes/cic')
 const sbcRouter = require('./routes/sbc')
 const fcecRouter = require('./routes/fcec')
 const craftRouter = require('./routes/craft')
+const authenticateToken = require('./middleware/authenticateToken')
+
+// Konfigurasi multer untuk menyimpan file di folder "uploads"
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/') // Folder tempat menyimpan file
+  },
+  filename: function (req, file, cb) {
+    cb(null, `${Date.now()}-${file.originalname}`) // Rename file with timestamp followed by original name
+  },
+})
+
+const upload = multer({ storage })
 
 const options = {
   definition: {
@@ -46,6 +61,16 @@ app.use(bodyParser.urlencoded({ extended: false }))
 
 app.get('/', (req, res) => {
   res.send('Hello from the backend!')
+})
+
+app.use('/uploads', express.static('uploads'))
+
+// Endpoint untuk mengunggah file
+app.post('/upload', authenticateToken, upload.single('file'), (req, res) => {
+  res.json({
+    message: 'File uploaded successfully',
+    filePath: `/uploads/${req.file.filename}`,
+  })
 })
 
 app.use('/api', userRouter)

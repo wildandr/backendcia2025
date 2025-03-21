@@ -5,6 +5,38 @@ const sequelize = require('../config/database')
 const authenticateToken = require('../middleware/authenticateToken')
 const Team = require('../models/team')
 const Member = require('../models/member')
+const multer = require('multer')
+const path = require('path')
+const fs = require('fs')
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './uploads')
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
+    cb(
+      null,
+      file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)
+    )
+  },
+})
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/
+    const extname = allowedTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    )
+    if (extname) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only .jpeg, .jpg, .png and .pdf format allowed!'))
+    }
+  },
+})
 
 /**
  * @swagger
@@ -190,10 +222,6 @@ router.get('/teams/cic/:teamId', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - team
- *               - leader
- *               - members
  *             properties:
  *               team:
  *                 type: object
@@ -203,162 +231,162 @@ router.get('/teams/cic/:teamId', authenticateToken, async (req, res) => {
  *                 properties:
  *                   team_name:
  *                     type: string
- *                     example: "Innovators Team"
  *                   institution_name:
  *                     type: string
- *                     example: "University of Innovation"
  *                   payment_proof:
  *                     type: string
- *                     example: "link_to_payment_proof.jpg"
  *                   user_id:
  *                     type: integer
- *                     example: 1
  *                   email:
  *                     type: string
- *                     example: "teamleader@example.com"
  *                   voucher:
  *                     type: string
- *                     example: "DISCOUNT2025"
  *               leader:
- *                 type: object
- *                 required:
- *                   - full_name
- *                   - department
- *                   - email
- *                 properties:
- *                   full_name:
- *                     type: string
- *                     example: "John Leader"
- *                   department:
- *                     type: string
- *                     example: "Computer Science"
- *                   batch:
- *                     type: string
- *                     example: "2021"
- *                   phone_number:
- *                     type: string
- *                     example: "1234567890"
- *                   line_id:
- *                     type: string
- *                     example: "john_leader"
- *                   email:
- *                     type: string
- *                     example: "john.leader@example.com"
- *                   ktm:
- *                     type: string
- *                     example: "link_to_ktm.jpg"
- *                   active_student_letter:
- *                     type: string
- *                     example: "link_to_active_student_letter.pdf"
- *                   photo:
- *                     type: string
- *                     example: "link_to_photo.jpg"
- *                   twibbon_and_poster_link:
- *                     type: string
- *                     example: "link_to_twibbon_poster.jpg"
+ *                 $ref: '#/components/schemas/MemberInput'
  *               members:
  *                 type: array
  *                 items:
- *                   type: object
- *                   required:
- *                     - full_name
- *                     - department
- *                     - email
- *                   properties:
- *                     full_name:
- *                       type: string
- *                       example: "Alice Member"
- *                     department:
- *                       type: string
- *                       example: "Information Technology"
- *                     batch:
- *                       type: string
- *                       example: "2021"
- *                     phone_number:
- *                       type: string
- *                       example: "0987654321"
- *                     line_id:
- *                       type: string
- *                       example: "alice_member"
- *                     email:
- *                       type: string
- *                       example: "alice.member@example.com"
- *                     ktm:
- *                       type: string
- *                       example: "link_to_ktm.jpg"
- *                     active_student_letter:
- *                       type: string
- *                       example: "link_to_active_student_letter.pdf"
- *                     photo:
- *                       type: string
- *                       example: "link_to_photo.jpg"
- *                     twibbon_and_poster_link:
- *                       type: string
- *                       example: "link_to_twibbon_poster.jpg"
+ *                   $ref: '#/components/schemas/MemberInput'
  */
-router.post('/teams/cic/new', authenticateToken, async (req, res) => {
-  try {
-    const { team, leader, members } = req.body
+router.post(
+  '/teams/cic/new',
+  authenticateToken,
+  upload.fields([
+    { name: 'payment_proof', maxCount: 1 },
+    { name: 'ktm', maxCount: 4 },
+    { name: 'active_student_letter', maxCount: 4 },
+    { name: 'photo', maxCount: 4 },
+    { name: 'voucher', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const { team, leader, members } = req.body
 
-    await sequelize.query(
-      `INSERT INTO teams (team_name, institution_name, payment_proof, event_id, user_id, email, voucher) VALUES (:team_name, :institution_name, :payment_proof, :event_id, :user_id, :email, :voucher)`,
-      {
-        replacements: {
-          team_name: team.team_name,
-          institution_name: team.institution_name,
-          payment_proof: team.payment_proof,
-          event_id: 4,
-          user_id: team.user_id,
-          email: team.email,
-          voucher: team.voucher || null,
-        },
-        type: QueryTypes.INSERT,
+      // Parse JSON strings if needed
+      const teamData = typeof team === 'string' ? JSON.parse(team) : team
+      const leaderData =
+        typeof leader === 'string' ? JSON.parse(leader) : leader
+      const membersData =
+        typeof members === 'string' ? JSON.parse(members) : members
+
+      // Check if team name already exists first before handling any files
+      const existingTeam = await sequelize.query(
+        `SELECT team_id FROM teams WHERE team_name = :team_name AND event_id = :event_id`,
+        {
+          replacements: {
+            team_name: teamData.team_name,
+            event_id: 4,
+          },
+          type: QueryTypes.SELECT,
+        }
+      )
+
+      if (existingTeam.length > 0) {
+        // Delete any uploaded files if team exists
+        if (req.files) {
+          Object.values(req.files).forEach((fileArray) => {
+            fileArray.forEach((file) => {
+              fs.unlinkSync(file.path)
+            })
+          })
+        }
+
+        return res.status(400).json({
+          message: 'Team name already exists',
+          error: 'TEAM_NAME_EXISTS',
+        })
       }
-    )
 
-    const [teamResult] = await sequelize.query(
-      `SELECT LAST_INSERT_ID() as team_id`,
-      { type: QueryTypes.SELECT }
-    )
+      // Handle file paths
+      const payment_proof = req.files.payment_proof
+        ? req.files.payment_proof[0].path
+        : null
 
-    await sequelize.query(
-      `INSERT INTO members (team_id, full_name, department, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) VALUES (:teamId, :full_name, :department, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
-      {
-        replacements: {
-          teamId: teamResult.team_id,
-          ...leader,
-          is_leader: 1,
-        },
-        type: QueryTypes.INSERT,
+      // Store voucher file path in voucher column if provided
+      const voucher = req.files.voucher ? req.files.voucher[0].path : null
+
+      await sequelize.query(
+        `INSERT INTO teams (team_name, institution_name, payment_proof, event_id, user_id, email, voucher) VALUES (:team_name, :institution_name, :payment_proof, :event_id, :user_id, :email, :voucher)`,
+        {
+          replacements: {
+            team_name: teamData.team_name,
+            institution_name: teamData.institution_name,
+            payment_proof: payment_proof,
+            event_id: 4,
+            user_id: teamData.user_id,
+            email: teamData.email,
+            voucher: voucher, // Use this for storing the file path
+          },
+          type: QueryTypes.INSERT,
+        }
+      )
+
+      const [teamResult] = await sequelize.query(
+        `SELECT LAST_INSERT_ID() as team_id`,
+        { type: QueryTypes.SELECT }
+      )
+
+      // Handle leader files
+      const leaderFiles = {
+        ktm: req.files.ktm ? req.files.ktm[0].path : null,
+        active_student_letter: req.files.active_student_letter
+          ? req.files.active_student_letter[0].path
+          : null,
+        photo: req.files.photo ? req.files.photo[0].path : null,
       }
-    )
 
-    await Promise.all(
-      members.map(async (member) => {
-        await sequelize.query(
-          `INSERT INTO members (team_id, full_name, department, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) VALUES (:teamId, :full_name, :department, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
-          {
-            replacements: {
-              teamId: teamResult.team_id,
-              ...member,
-              is_leader: 0,
-            },
-            type: QueryTypes.INSERT,
+      await sequelize.query(
+        `INSERT INTO members (team_id, full_name, department, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) VALUES (:teamId, :full_name, :department, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
+        {
+          replacements: {
+            teamId: teamResult.team_id,
+            ...leaderData,
+            ...leaderFiles,
+            is_leader: 1,
+          },
+          type: QueryTypes.INSERT,
+        }
+      )
+
+      // Handle member files
+      let fileIndex = 1
+      await Promise.all(
+        membersData.map(async (member) => {
+          const memberFiles = {
+            ktm: req.files.ktm ? req.files.ktm[fileIndex].path : null,
+            active_student_letter: req.files.active_student_letter
+              ? req.files.active_student_letter[fileIndex].path
+              : null,
+            photo: req.files.photo ? req.files.photo[fileIndex].path : null,
           }
-        )
-      })
-    )
+          fileIndex++
 
-    res.status(201).json({
-      message: 'Team and members created successfully',
-    })
-  } catch (error) {
-    res.status(500).json({
-      message: 'An error occurred',
-      error: error.message,
-    })
+          await sequelize.query(
+            `INSERT INTO members (team_id, full_name, department, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) VALUES (:teamId, :full_name, :department, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
+            {
+              replacements: {
+                teamId: teamResult.team_id,
+                ...member,
+                ...memberFiles,
+                is_leader: 0,
+              },
+              type: QueryTypes.INSERT,
+            }
+          )
+        })
+      )
+
+      res.status(201).json({
+        message: 'Team and members created successfully',
+      })
+    } catch (error) {
+      res.status(500).json({
+        message: 'An error occurred',
+        error: error.message,
+      })
+    }
   }
-})
+)
 
 /**
  * @swagger
