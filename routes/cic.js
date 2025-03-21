@@ -190,6 +190,10 @@ router.get('/teams/cic/:teamId', authenticateToken, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - team
+ *               - leader
+ *               - members
  *             properties:
  *               team:
  *                 type: object
@@ -199,22 +203,98 @@ router.get('/teams/cic/:teamId', authenticateToken, async (req, res) => {
  *                 properties:
  *                   team_name:
  *                     type: string
+ *                     example: "Innovators Team"
  *                   institution_name:
  *                     type: string
+ *                     example: "University of Innovation"
  *                   payment_proof:
  *                     type: string
+ *                     example: "link_to_payment_proof.jpg"
  *                   user_id:
  *                     type: integer
+ *                     example: 1
  *                   email:
  *                     type: string
+ *                     example: "teamleader@example.com"
  *                   voucher:
  *                     type: string
+ *                     example: "DISCOUNT2025"
  *               leader:
- *                 $ref: '#/components/schemas/MemberInput'
+ *                 type: object
+ *                 required:
+ *                   - full_name
+ *                   - department
+ *                   - email
+ *                 properties:
+ *                   full_name:
+ *                     type: string
+ *                     example: "John Leader"
+ *                   department:
+ *                     type: string
+ *                     example: "Computer Science"
+ *                   batch:
+ *                     type: string
+ *                     example: "2021"
+ *                   phone_number:
+ *                     type: string
+ *                     example: "1234567890"
+ *                   line_id:
+ *                     type: string
+ *                     example: "john_leader"
+ *                   email:
+ *                     type: string
+ *                     example: "john.leader@example.com"
+ *                   ktm:
+ *                     type: string
+ *                     example: "link_to_ktm.jpg"
+ *                   active_student_letter:
+ *                     type: string
+ *                     example: "link_to_active_student_letter.pdf"
+ *                   photo:
+ *                     type: string
+ *                     example: "link_to_photo.jpg"
+ *                   twibbon_and_poster_link:
+ *                     type: string
+ *                     example: "link_to_twibbon_poster.jpg"
  *               members:
  *                 type: array
  *                 items:
- *                   $ref: '#/components/schemas/MemberInput'
+ *                   type: object
+ *                   required:
+ *                     - full_name
+ *                     - department
+ *                     - email
+ *                   properties:
+ *                     full_name:
+ *                       type: string
+ *                       example: "Alice Member"
+ *                     department:
+ *                       type: string
+ *                       example: "Information Technology"
+ *                     batch:
+ *                       type: string
+ *                       example: "2021"
+ *                     phone_number:
+ *                       type: string
+ *                       example: "0987654321"
+ *                     line_id:
+ *                       type: string
+ *                       example: "alice_member"
+ *                     email:
+ *                       type: string
+ *                       example: "alice.member@example.com"
+ *                     ktm:
+ *                       type: string
+ *                       example: "link_to_ktm.jpg"
+ *                     active_student_letter:
+ *                       type: string
+ *                       example: "link_to_active_student_letter.pdf"
+ *                     photo:
+ *                       type: string
+ *                       example: "link_to_photo.jpg"
+ *                     twibbon_and_poster_link:
+ *                       type: string
+ *                       example: "link_to_twibbon_poster.jpg"
  */
 router.post('/teams/cic/new', authenticateToken, async (req, res) => {
   try {
