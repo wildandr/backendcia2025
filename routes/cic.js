@@ -12,7 +12,7 @@ const fs = require('fs')
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, './uploads')
+    cb(null, './uploads/cic')
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
