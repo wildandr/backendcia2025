@@ -203,9 +203,9 @@ router.post(
     try {
       // Parse participant data
       const participantData =
-        typeof req.body.participant === 'string'
-          ? JSON.parse(req.body.participant)
-          : req.body.participant
+        typeof req.body.data === 'string'
+          ? JSON.parse(req.body.data)
+          : req.body.data
 
       // Get file paths
       const bukti_follow_cia = req.files.bukti_follow_cia
