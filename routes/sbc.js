@@ -3,6 +3,43 @@ const router = express.Router()
 const { QueryTypes } = require('sequelize')
 const sequelize = require('../config/database')
 const authenticateToken = require('../middleware/authenticateToken')
+const multer = require('multer')
+const path = require('path')
+const fs = require('fs')
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = 'uploads/sbc'
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true })
+    }
+    cb(null, uploadPath)
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
+    cb(
+      null,
+      file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)
+    )
+  },
+})
+
+const upload = multer({
+  storage: storage,
+  fileFilter: function (req, file, cb) {
+    if (
+      file.mimetype.startsWith('image/') ||
+      file.mimetype === 'application/pdf'
+    ) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only images and PDF files are allowed!'))
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+})
 
 /**
  * @swagger
@@ -231,90 +268,158 @@ router.get('/teams/sbc/:teamId', authenticateToken, async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.post('/teams/sbc/new', authenticateToken, async (req, res) => {
-  try {
-    const { team, leader, members, dosbim, sbc } = req.body
-    const user_id = team.user_id // get user_id from team object
+router.post(
+  '/teams/sbc/new',
+  authenticateToken,
+  upload.fields([
+    { name: 'payment_proof', maxCount: 1 },
+    { name: 'voucher', maxCount: 1 },
+    { name: 'leader_ktm', maxCount: 1 },
+    { name: 'leader_active_student_letter', maxCount: 1 },
+    { name: 'leader_photo', maxCount: 1 },
+    { name: 'member1_ktm', maxCount: 1 },
+    { name: 'member1_active_student_letter', maxCount: 1 },
+    { name: 'member1_photo', maxCount: 1 },
+    { name: 'member2_ktm', maxCount: 1 },
+    { name: 'member2_active_student_letter', maxCount: 1 },
+    { name: 'member2_photo', maxCount: 1 },
+    { name: 'dosbim_photo', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const { team, leader, members, dosbim, sbc } = JSON.parse(req.body.data)
+      const user_id = team.user_id
 
-    const createdTeam = await sequelize.query(
-      `INSERT INTO teams (team_name, institution_name, payment_proof, user_id, event_id, voucher) VALUES (:team_name, :institution_name, :payment_proof, :user_id, 3, :voucher)`,
-      {
-        replacements: {
-          team_name: team.team_name,
-          institution_name: team.institution_name,
-          payment_proof: team.payment_proof,
-          user_id: user_id,
-          voucher: team.voucher || null,
-        },
-        type: QueryTypes.INSERT,
-      }
-    )
+      // Process uploaded files
+      const payment_proof = req.files['payment_proof']
+        ? req.files['payment_proof'][0].path
+        : null
+      const voucher = req.files['voucher'] ? req.files['voucher'][0].path : null
 
-    const teamId = createdTeam[0]
-
-    const createdLeader = await sequelize.query(
-      `INSERT INTO members (team_id, full_name, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader, nim) VALUES (:team_id, :full_name, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, 1, :nim)`,
-      {
-        replacements: {
-          ...leader,
-          team_id: teamId,
-        },
-        type: QueryTypes.INSERT,
-      }
-    )
-
-    const createdmembers = await Promise.all(
-      members.map((member) =>
-        sequelize.query(
-          `INSERT INTO members (team_id, full_name, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader, nim) VALUES (:team_id, :full_name, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, 0, :nim)`,
-          {
-            replacements: {
-              ...member,
-              team_id: teamId,
-            },
-            type: QueryTypes.INSERT,
-          }
-        )
+      const createdTeam = await sequelize.query(
+        `INSERT INTO teams (team_name, institution_name, payment_proof, user_id, event_id, voucher) VALUES (:team_name, :institution_name, :payment_proof, :user_id, 3, :voucher)`,
+        {
+          replacements: {
+            team_name: team.team_name,
+            institution_name: team.institution_name,
+            payment_proof: payment_proof,
+            user_id: user_id,
+            voucher: voucher,
+          },
+          type: QueryTypes.INSERT,
+        }
       )
-    )
 
-    const createdDosbim = await sequelize.query(
-      `INSERT INTO dosbim ( team_id, full_name, nip, email, phone_number, photo) VALUES (:team_id, :full_name, :nip, :email, :phone_number, :photo)`,
-      {
-        replacements: {
-          ...dosbim[0],
-          team_id: teamId,
-        },
-        type: QueryTypes.INSERT,
+      const teamId = createdTeam[0]
+
+      // Process leader files
+      const leaderFiles = {
+        ktm: req.files['leader_ktm'] ? req.files['leader_ktm'][0].path : null,
+        active_student_letter: req.files['leader_active_student_letter']
+          ? req.files['leader_active_student_letter'][0].path
+          : null,
+        photo: req.files['leader_photo']
+          ? req.files['leader_photo'][0].path
+          : null,
       }
-    )
 
-    const createdSbc = await sequelize.query(
-      `INSERT INTO sbc (team_id, bridge_name) VALUES (:team_id, :bridge_name)`,
-      {
-        replacements: {
-          ...sbc[0],
-          team_id: teamId,
-        },
-        type: QueryTypes.INSERT,
+      const createdLeader = await sequelize.query(
+        `INSERT INTO members (team_id, full_name, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader, nim) VALUES (:team_id, :full_name, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, 1, :nim)`,
+        {
+          replacements: {
+            ...leader,
+            team_id: teamId,
+            ktm: leaderFiles.ktm,
+            active_student_letter: leaderFiles.active_student_letter,
+            photo: leaderFiles.photo,
+          },
+          type: QueryTypes.INSERT,
+        }
+      )
+
+      // Process members files and create members
+      const createdmembers = await Promise.all(
+        members.map(async (member, index) => {
+          const memberFiles = {
+            ktm: req.files[`member${index + 1}_ktm`]
+              ? req.files[`member${index + 1}_ktm`][0].path
+              : null,
+            active_student_letter: req.files[
+              `member${index + 1}_active_student_letter`
+            ]
+              ? req.files[`member${index + 1}_active_student_letter`][0].path
+              : null,
+            photo: req.files[`member${index + 1}_photo`]
+              ? req.files[`member${index + 1}_photo`][0].path
+              : null,
+          }
+
+          return sequelize.query(
+            `INSERT INTO members (team_id, full_name, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader, nim) VALUES (:team_id, :full_name, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, 0, :nim)`,
+            {
+              replacements: {
+                ...member,
+                team_id: teamId,
+                ktm: memberFiles.ktm,
+                active_student_letter: memberFiles.active_student_letter,
+                photo: memberFiles.photo,
+              },
+              type: QueryTypes.INSERT,
+            }
+          )
+        })
+      )
+
+      // Process dosbim photo
+      const dosbimPhoto = req.files['dosbim_photo']
+        ? req.files['dosbim_photo'][0].path
+        : null
+
+      const createdDosbim = await sequelize.query(
+        `INSERT INTO dosbim (team_id, full_name, nip, email, phone_number, photo) VALUES (:team_id, :full_name, :nip, :email, :phone_number, :photo)`,
+        {
+          replacements: {
+            ...dosbim[0],
+            team_id: teamId,
+            photo: dosbimPhoto,
+          },
+          type: QueryTypes.INSERT,
+        }
+      )
+
+      const createdSbc = await sequelize.query(
+        `INSERT INTO sbc (team_id, bridge_name) VALUES (:team_id, :bridge_name)`,
+        {
+          replacements: {
+            ...sbc[0],
+            team_id: teamId,
+          },
+          type: QueryTypes.INSERT,
+        }
+      )
+
+      res.status(201).json({
+        message: 'Team created successfully',
+      })
+    } catch (error) {
+      // Delete uploaded files if there's an error
+      if (req.files) {
+        Object.values(req.files).forEach((fileArray) => {
+          fileArray.forEach((file) => {
+            fs.unlink(file.path, (err) => {
+              if (err) console.error('Error deleting file:', err)
+            })
+          })
+        })
       }
-    )
 
-    res.status(201).json({
-      message: 'Team created successfully',
-      team: createdTeam,
-      leader: createdLeader,
-      members: createdmembers,
-      dosbim: createdDosbim,
-      sbc: createdSbc,
-    })
-  } catch (error) {
-    res.status(500).json({
-      message: 'An error occurred',
-      error: error.message,
-    })
+      res.status(500).json({
+        message: 'An error occurred',
+        error: error.message,
+      })
+    }
   }
-})
+)
 
 /**
  * @swagger
