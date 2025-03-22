@@ -400,6 +400,11 @@ router.post(
 
       res.status(201).json({
         message: 'Team created successfully',
+        team: createdTeam,
+        leader: createdLeader,
+        members: createdmembers,
+        dosbim: createdDosbim,
+        sbc: createdSbc,
       })
     } catch (error) {
       // Delete uploaded files if there's an error

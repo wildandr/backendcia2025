@@ -255,39 +255,32 @@ router.post(
     { name: 'payment_proof', maxCount: 1 },
     { name: 'voucher', maxCount: 1 },
     // Leader files
-    { name: 'ktm_leader', maxCount: 1 },
-    { name: 'active_student_letter_leader', maxCount: 1 },
-    { name: 'photo_leader', maxCount: 1 },
+    { name: 'leader_ktm', maxCount: 1 },
+    { name: 'leader_active_student_letter', maxCount: 1 },
+    { name: 'leader_photo', maxCount: 1 },
     // Member 1 files
-    { name: 'ktm_member1', maxCount: 1 },
-    { name: 'active_student_letter_member1', maxCount: 1 },
-    { name: 'photo_member1', maxCount: 1 },
+    { name: 'member1_ktm', maxCount: 1 },
+    { name: 'member1_active_student_letter', maxCount: 1 },
+    { name: 'member1_photo', maxCount: 1 },
     // Member 2 files
-    { name: 'ktm_member2', maxCount: 1 },
-    { name: 'active_student_letter_member2', maxCount: 1 },
-    { name: 'photo_member2', maxCount: 1 },
+    { name: 'member2_ktm', maxCount: 1 },
+    { name: 'member2_active_student_letter', maxCount: 1 },
+    { name: 'member2_photo', maxCount: 1 },
     // Member 3 files
-    { name: 'ktm_member3', maxCount: 1 },
-    { name: 'active_student_letter_member3', maxCount: 1 },
-    { name: 'photo_member3', maxCount: 1 },
+    { name: 'member3_ktm', maxCount: 1 },
+    { name: 'member3_active_student_letter', maxCount: 1 },
+    { name: 'member3_photo', maxCount: 1 },
   ]),
   async (req, res) => {
     try {
-      const { team, leader, members } = req.body
-
-      // Parse JSON strings if needed
-      const teamData = typeof team === 'string' ? JSON.parse(team) : team
-      const leaderData =
-        typeof leader === 'string' ? JSON.parse(leader) : leader
-      const membersData =
-        typeof members === 'string' ? JSON.parse(members) : members
+      const { team, leader, members } = JSON.parse(req.body.data)
 
       // Check if team name already exists first before handling any files
       const existingTeam = await sequelize.query(
         `SELECT team_id FROM teams WHERE team_name = :team_name AND event_id = :event_id`,
         {
           replacements: {
-            team_name: teamData.team_name,
+            team_name: team.team_name,
             event_id: 4,
           },
           type: QueryTypes.SELECT,
@@ -322,12 +315,12 @@ router.post(
         `INSERT INTO teams (team_name, institution_name, payment_proof, event_id, user_id, email, voucher) VALUES (:team_name, :institution_name, :payment_proof, :event_id, :user_id, :email, :voucher)`,
         {
           replacements: {
-            team_name: teamData.team_name,
-            institution_name: teamData.institution_name,
+            team_name: team.team_name,
+            institution_name: team.institution_name,
             payment_proof: payment_proof,
             event_id: 4,
-            user_id: teamData.user_id,
-            email: teamData.email,
+            user_id: team.user_id,
+            email: team.email,
             voucher: voucher, // Use this for storing the file path
           },
           type: QueryTypes.INSERT,
@@ -341,11 +334,11 @@ router.post(
 
       // Handle leader files with new field names
       const leaderFiles = {
-        ktm: req.files.ktm_leader ? req.files.ktm_leader[0].path : null,
-        active_student_letter: req.files.active_student_letter_leader
-          ? req.files.active_student_letter_leader[0].path
+        ktm: req.files.leader_ktm ? req.files.leader_ktm[0].path : null,
+        active_student_letter: req.files.leader_active_student_letter
+          ? req.files.leader_active_student_letter[0].path
           : null,
-        photo: req.files.photo_leader ? req.files.photo_leader[0].path : null,
+        photo: req.files.leader_photo ? req.files.leader_photo[0].path : null,
       }
 
       await sequelize.query(
@@ -353,7 +346,7 @@ router.post(
         {
           replacements: {
             teamId: teamResult.team_id,
-            ...leaderData,
+            ...leader,
             ...leaderFiles,
             is_leader: 1,
           },
@@ -363,19 +356,19 @@ router.post(
 
       // Handle member files with specific field names
       await Promise.all(
-        membersData.map(async (member, index) => {
+        members.map(async (member, index) => {
           const memberIndex = index + 1
           const memberFiles = {
-            ktm: req.files[`ktm_member${memberIndex}`]
-              ? req.files[`ktm_member${memberIndex}`][0].path
+            ktm: req.files[`member${memberIndex}_ktm`]
+              ? req.files[`member${memberIndex}_ktm`][0].path
               : null,
             active_student_letter: req.files[
-              `active_student_letter_member${memberIndex}`
+              `member${memberIndex}_active_student_letter`
             ]
-              ? req.files[`active_student_letter_member${memberIndex}`][0].path
+              ? req.files[`member${memberIndex}_active_student_letter`][0].path
               : null,
-            photo: req.files[`photo_member${memberIndex}`]
-              ? req.files[`photo_member${memberIndex}`][0].path
+            photo: req.files[`member${memberIndex}_photo`]
+              ? req.files[`member${memberIndex}_photo`][0].path
               : null,
           }
 
