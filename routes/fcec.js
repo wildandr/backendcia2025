@@ -3,6 +3,57 @@ const router = express.Router()
 const { QueryTypes } = require('sequelize')
 const sequelize = require('../config/database')
 const authenticateToken = require('../middleware/authenticateToken')
+const multer = require('multer')
+const fs = require('fs')
+const path = require('path')
+
+// Create uploads/fcec directory if it doesn't exist
+const uploadDir = path.join(__dirname, '../uploads/fcec')
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true })
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './uploads/fcec')
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
+    cb(
+      null,
+      file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname)
+    )
+  },
+})
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/
+    const extname = allowedTypes.test(
+      path.extname(file.originalname).toLowerCase()
+    )
+    if (extname) {
+      cb(null, true)
+    } else {
+      cb(new Error('Only .jpeg, .jpg, .png and .pdf format allowed!'))
+    }
+  },
+})
+
+const uploadFields = [
+  { name: 'abstract_file', maxCount: 1 },
+  { name: 'originality_statement', maxCount: 1 },
+  { name: 'leader_ktm', maxCount: 1 },
+  { name: 'leader_active_student_letter', maxCount: 1 },
+  { name: 'leader_photo', maxCount: 1 },
+  { name: 'member1_ktm', maxCount: 1 },
+  { name: 'member1_active_student_letter', maxCount: 1 },
+  { name: 'member1_photo', maxCount: 1 },
+  { name: 'member2_ktm', maxCount: 1 },
+  { name: 'member2_active_student_letter', maxCount: 1 },
+  { name: 'member2_photo', maxCount: 1 },
+]
 
 /**
  * @swagger
@@ -208,54 +259,171 @@ router.get('/teams/fcec/:teamId', authenticateToken, async (req, res) => {
  *       500:
  *         description: Server error
  */
-router.post('/teams/fcec/new', authenticateToken, async (req, res) => {
-  const { team, leader, members, fcec } = req.body
-  const eventId = 1
-  const userId = team.user_id // get userId from team
+router.post(
+  '/teams/fcec/new',
+  authenticateToken,
+  upload.fields([
+    { name: 'abstract_file', maxCount: 1 },
+    { name: 'originality_statement', maxCount: 1 },
+    // Leader files
+    { name: 'leader_ktm', maxCount: 1 },
+    { name: 'leader_active_student_letter', maxCount: 1 },
+    { name: 'leader_photo', maxCount: 1 },
+    // Member 1 files
+    { name: 'member1_ktm', maxCount: 1 },
+    { name: 'member1_active_student_letter', maxCount: 1 },
+    { name: 'member1_photo', maxCount: 1 },
+    // Member 2 files
+    { name: 'member2_ktm', maxCount: 1 },
+    { name: 'member2_active_student_letter', maxCount: 1 },
+    { name: 'member2_photo', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const { team, leader, members, fcec } = JSON.parse(req.body.data)
 
-  try {
-    const [teamId] = await sequelize.query(
-      `INSERT INTO teams (team_name, institution_name, payment_proof, event_id, user_id, voucher) VALUES (:team_name, :institution_name, :payment_proof, :eventId, :userId, :voucher)`,
-      {
-        replacements: { voucher: null, ...team, eventId, userId },
-        type: QueryTypes.INSERT,
-      }
-    )
-
-    await sequelize.query(
-      `INSERT INTO members (team_id, full_name, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) VALUES (:team_id, :full_name, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
-      {
-        replacements: { ...leader, team_id: teamId },
-        type: QueryTypes.INSERT,
-      }
-    )
-
-    for (const member of members) {
-      await sequelize.query(
-        `INSERT INTO members (team_id, full_name, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) VALUES (:team_id, :full_name, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
+      // Check if team name already exists
+      const existingTeam = await sequelize.query(
+        `SELECT team_id FROM teams WHERE team_name = :team_name AND event_id = :event_id`,
         {
-          replacements: { ...member, team_id: teamId },
+          replacements: {
+            team_name: team.team_name,
+            event_id: 1, // FCEC event_id
+          },
+          type: QueryTypes.SELECT,
+        }
+      )
+
+      if (existingTeam.length > 0) {
+        // Delete uploaded files if team exists
+        if (req.files) {
+          Object.values(req.files).forEach((fileArray) => {
+            fileArray.forEach((file) => {
+              fs.unlinkSync(file.path)
+            })
+          })
+        }
+
+        return res.status(400).json({
+          message: 'Team name already exists',
+          error: 'TEAM_NAME_EXISTS',
+        })
+      }
+
+      // Handle FCEC specific files
+      const abstractFile = req.files.abstract_file
+        ? req.files.abstract_file[0].path
+        : null
+      const originalityStatement = req.files.originality_statement
+        ? req.files.originality_statement[0].path
+        : null
+
+      // Create team
+      const [teamId] = await sequelize.query(
+        `INSERT INTO teams (team_name, institution_name, payment_proof, event_id, user_id, email, voucher) 
+         VALUES (:team_name, :institution_name, :payment_proof, :event_id, :user_id, :email, :voucher)`,
+        {
+          replacements: {
+            ...team,
+            event_id: 1,
+            voucher: null,
+          },
           type: QueryTypes.INSERT,
         }
       )
-    }
 
-    await sequelize.query(
-      `INSERT INTO fcec (team_id, originality_statement, abstract_title, abstract_file, abstract_video_link) VALUES (:team_id, :originality_statement, :abstract_title, :abstract_file, :abstract_video_link)`,
-      {
-        replacements: { ...fcec[0], team_id: teamId },
-        type: QueryTypes.INSERT,
+      // Handle leader files
+      const leaderFiles = {
+        ktm: req.files.leader_ktm ? req.files.leader_ktm[0].path : null,
+        active_student_letter: req.files.leader_active_student_letter
+          ? req.files.leader_active_student_letter[0].path
+          : null,
+        photo: req.files.leader_photo ? req.files.leader_photo[0].path : null,
       }
-    )
 
-    res.status(201).json({ message: 'Team created successfully' })
-  } catch (error) {
-    res.status(500).json({
-      message: 'An error occurred',
-      error: error.message,
-    })
+      // Insert leader
+      await sequelize.query(
+        `INSERT INTO members (team_id, full_name, department, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) 
+         VALUES (:teamId, :full_name, :department, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
+        {
+          replacements: {
+            ...leader,
+            ...leaderFiles,
+            teamId,
+            is_leader: 1,
+          },
+          type: QueryTypes.INSERT,
+        }
+      )
+
+      // Handle member files and insert members
+      await Promise.all(
+        members.map(async (member, index) => {
+          const memberIndex = index + 1
+          const memberFiles = {
+            ktm: req.files[`member${memberIndex}_ktm`]
+              ? req.files[`member${memberIndex}_ktm`][0].path
+              : null,
+            active_student_letter: req.files[
+              `member${memberIndex}_active_student_letter`
+            ]
+              ? req.files[`member${memberIndex}_active_student_letter`][0].path
+              : null,
+            photo: req.files[`member${memberIndex}_photo`]
+              ? req.files[`member${memberIndex}_photo`][0].path
+              : null,
+          }
+
+          await sequelize.query(
+            `INSERT INTO members (team_id, full_name, department, batch, phone_number, line_id, email, ktm, active_student_letter, photo, twibbon_and_poster_link, is_leader) 
+             VALUES (:teamId, :full_name, :department, :batch, :phone_number, :line_id, :email, :ktm, :active_student_letter, :photo, :twibbon_and_poster_link, :is_leader)`,
+            {
+              replacements: {
+                ...member,
+                ...memberFiles,
+                teamId,
+                is_leader: 0,
+              },
+              type: QueryTypes.INSERT,
+            }
+          )
+        })
+      )
+
+      // Insert FCEC specific data
+      await sequelize.query(
+        `INSERT INTO fcec (team_id, originality_statement, abstract_title, abstract_file, abstract_video_link) 
+         VALUES (:teamId, :originality_statement, :abstract_title, :abstract_file, :abstract_video_link)`,
+        {
+          replacements: {
+            ...fcec,
+            teamId,
+            abstract_file: abstractFile,
+            originality_statement: originalityStatement,
+          },
+          type: QueryTypes.INSERT,
+        }
+      )
+
+      res.status(201).json({
+        message: 'Team created successfully',
+      })
+    } catch (error) {
+      // Delete uploaded files if there's an error
+      if (req.files) {
+        Object.values(req.files).forEach((files) => {
+          files.forEach((file) => {
+            fs.unlinkSync(file.path)
+          })
+        })
+      }
+      res.status(500).json({
+        message: 'An error occurred',
+        error: error.message,
+      })
+    }
   }
-})
+)
 
 /**
  * @swagger
