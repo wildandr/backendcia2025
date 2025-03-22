@@ -4,20 +4,23 @@
     "password": "",
     "database": "lustrumdtsl",
     "host": "localhost",
-    "dialect": "mysql"
+    "dialect": "mysql",
+    "port": 2610
   },
   "test": {
     "username": "root",
     "password": "",
     "database": "lustrumdtsl",
     "host": "localhost",
-    "dialect": "mysql"
+    "dialect": "mysql",
+    "port": 2610
   },
   "production": {
     "username": "root",
     "password": "",
     "database": "lustrumdtsl",
     "host": "localhost",
-    "dialect": "mysql"
+    "dialect": "mysql",
+    "port": 2610
   }
 }
