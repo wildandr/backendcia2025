@@ -198,6 +198,7 @@ router.post(
     { name: 'bukti_story', maxCount: 1 },
     { name: 'ktm', maxCount: 1 },
     { name: 'payment_proof', maxCount: 1 },
+    { name: 'bundle', maxCount: 1 },
   ]),
   async (req, res) => {
     try {
@@ -206,6 +207,25 @@ router.post(
         typeof req.body.data === 'string'
           ? JSON.parse(req.body.data)
           : req.body.data
+
+      // Check if email already exists
+      const existingUser = await Craft.findOne({
+        where: { email: participantData.email },
+      })
+
+      if (existingUser) {
+        // Delete uploaded files if email already exists
+        if (req.files) {
+          Object.values(req.files).forEach((fileArray) => {
+            fileArray.forEach((file) => {
+              fs.unlinkSync(file.path)
+            })
+          })
+        }
+        return res.status(400).json({
+          message: 'Email already registered for CRAFT competition',
+        })
+      }
 
       // Get file paths
       const bukti_follow_cia = req.files.bukti_follow_cia
@@ -221,6 +241,7 @@ router.post(
       const payment_proof = req.files.payment_proof
         ? req.files.payment_proof[0].path
         : null
+      const bundle = req.files.bundle ? req.files.bundle[0].path : null
 
       const craft = await Craft.create({
         ...participantData,
@@ -229,6 +250,7 @@ router.post(
         bukti_follow_cia,
         bukti_follow_pktsl,
         bukti_story,
+        bundle,
       })
 
       res.status(201).json({
