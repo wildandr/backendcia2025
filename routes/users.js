@@ -154,7 +154,7 @@ router.post('/user/register', async (req, res) => {
 
     // Generate JWT token
     const payload = {
-      id: newUser.id,
+      user_id: newUser.user_id,
       username: newUser.username,
       email: newUser.email,
       isAdmin: newUser.isAdmin,
@@ -250,7 +250,7 @@ router.post('/user/login', async (req, res) => {
 
     // Enhanced JWT payload
     const payload = {
-      id: user.id,
+      user_id: user.user_id,
       username: user.username,
       email: user.email,
       isAdmin: user.isAdmin,

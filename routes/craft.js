@@ -208,6 +208,7 @@ router.post(
           ? JSON.parse(req.body.data)
           : req.body.data
 
+      const userId = req.user.user_id
       // Check if email already exists
       const existingUser = await Craft.findOne({
         where: { email: participantData.email },
@@ -245,6 +246,7 @@ router.post(
 
       const craft = await Craft.create({
         ...participantData,
+        user_id: userId,
         ktm,
         payment_proof,
         bukti_follow_cia,
