@@ -288,7 +288,7 @@ router.post(
   async (req, res) => {
     try {
       const { team, leader, members, dosbim, sbc } = JSON.parse(req.body.data)
-      const user_id = team.user_id
+      const userId = req.user.user_id
 
       // Process uploaded files
       const payment_proof = req.files['payment_proof']
@@ -303,7 +303,7 @@ router.post(
             team_name: team.team_name,
             institution_name: team.institution_name,
             payment_proof: payment_proof,
-            user_id: user_id,
+            user_id: userId,
             voucher: voucher,
           },
           type: QueryTypes.INSERT,
