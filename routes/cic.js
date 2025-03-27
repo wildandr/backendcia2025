@@ -10,12 +10,12 @@ const path = require('path')
 const fs = require('fs')
 
 // Ensure upload directory exists
-const uploadDir = './uploads/cic';
+const uploadDir = './uploads/cic'
 if (!fs.existsSync('./uploads')) {
-  fs.mkdirSync('./uploads');
+  fs.mkdirSync('./uploads')
 }
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
+  fs.mkdirSync(uploadDir)
 }
 
 // Configure multer storage
@@ -36,7 +36,7 @@ const upload = multer({
   storage: storage,
   limits: {
     fieldSize: 20 * 1024 * 1024,
-    fileSize: 10 * 1024 * 1024, 
+    fileSize: 10 * 1024 * 1024,
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|pdf/
@@ -290,29 +290,30 @@ router.post(
       if (!req.body.data) {
         return res.status(400).json({
           message: 'Missing team data',
-          error: 'DATA_MISSING'
-        });
+          error: 'DATA_MISSING',
+        })
       }
 
-      let teamData, leaderData, membersData;
+      let teamData, leaderData, membersData
+      const userId = req.user.user_id
       try {
-        const parsedData = JSON.parse(req.body.data);
-        teamData = parsedData.team;
-        leaderData = parsedData.leader;
-        membersData = parsedData.members;
+        const parsedData = JSON.parse(req.body.data)
+        teamData = parsedData.team
+        leaderData = parsedData.leader
+        membersData = parsedData.members
       } catch (error) {
         return res.status(400).json({
           message: 'Invalid JSON data format',
-          error: error.message
-        });
+          error: error.message,
+        })
       }
 
       // Validate required fields
       if (!teamData || !leaderData) {
         return res.status(400).json({
           message: 'Missing required team or leader data',
-          error: 'REQUIRED_FIELDS_MISSING'
-        });
+          error: 'REQUIRED_FIELDS_MISSING',
+        })
       }
 
       // Check if team name already exists first before handling any files
@@ -359,9 +360,9 @@ router.post(
             institution_name: teamData.institution_name,
             payment_proof: payment_proof,
             event_id: 4,
-            user_id: teamData.user_id,
+            user_id: userId,
             email: teamData.email,
-            voucher: voucher, 
+            voucher: voucher,
           },
           type: QueryTypes.INSERT,
         }
@@ -398,9 +399,9 @@ router.post(
       await Promise.all(
         membersData.map(async (member, index) => {
           if (index === 2 && !member.full_name.trim()) {
-            return; 
+            return
           }
-          
+
           const memberIndex = index + 1
           const memberFiles = {
             ktm: req.files[`member${memberIndex}_ktm`]
@@ -435,11 +436,11 @@ router.post(
         message: 'Team and members created successfully',
       })
     } catch (error) {
-      console.error('CIC team creation error:', error);
+      console.error('CIC team creation error:', error)
       res.status(500).json({
         message: 'An error occurred',
-        error: error.message || JSON.stringify(error) || 'Unknown error'
-      });
+        error: error.message || JSON.stringify(error) || 'Unknown error',
+      })
     }
   }
 )

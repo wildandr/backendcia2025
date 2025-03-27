@@ -281,7 +281,8 @@ router.post(
   async (req, res) => {
     try {
       const { team, leader, members, fcec } = JSON.parse(req.body.data)
-
+      const userId = req.user.user_id
+      console.log('Decoded user:', req.user)
       // Check if team name already exists
       const existingTeam = await sequelize.query(
         `SELECT team_id FROM teams WHERE team_name = :team_name AND event_id = :event_id`,
@@ -326,6 +327,7 @@ router.post(
           replacements: {
             ...team,
             event_id: 1,
+            user_id: userId,
             voucher: null,
           },
           type: QueryTypes.INSERT,
@@ -407,6 +409,8 @@ router.post(
 
       res.status(201).json({
         message: 'Team created successfully',
+        user_id: userId,
+        team_id: teamId,
       })
     } catch (error) {
       // Delete uploaded files if there's an error
