@@ -303,7 +303,7 @@ router.get('/user/:user_id/events', authenticateToken, async (req, res) => {
     const userEvents = await sequelize.query(
       `
     SELECT 
-        teams.team_id, teams.event_id, teams.team_name, teams.isVerified AS teams_isVerified, teams.isRejected AS teams_isRejected,
+        teams.team_id, teams.event_id, teams.team_name, teams.isVerified AS teams_isVerified, teams.isRejected AS teams_isRejected, teams.rejectMessage AS teams_rejectMessage,
         events.event_name
     FROM users
     LEFT JOIN teams ON users.user_id = teams.user_id
